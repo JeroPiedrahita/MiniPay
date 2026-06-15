@@ -1,0 +1,19 @@
+# Entornos virtuales
+fastapi/
+backend/
+.venv/
+env/
+venv/
+
+#Cache de python
+--pycache--/
+*.pyc
+.pytest_cache/
+
+# Base de datos local (para que no se suba la BD de pruebas)
+*.db
+*.sqlite3
+
+#Configuraciones de editores
+.vscode/
+.idea/
