@@ -1,6 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 import uuid
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+#Importamos la configuracion de nuestra base de datos y los modelos del ORM
+import models
+from database import engine, get_db
 
 #iNICIALIZAMOS LA APLICACION PRINCIPAL
 app= FastAPI (
@@ -9,9 +14,10 @@ app= FastAPI (
     version= "1.0.0"
 )
 
-# --- Base de datos simulada en memoria ---
-# Este diccionario guardará los pagos usando el 'id' generado como llave
-db_pagos = {}
+#---- Creacion Automatica de tablas---
+# Este comando le dice a SQLalchemy que cree todas las tablas definidas en models.py
+# Si es que aun no existen en el archivo minipay.db
+models.Base.metadata.create_all(bind=engine)
 
 #1. Definicmos el esquema de validacion (Data Transfer Object -DTO)
 class PagoRequest(BaseModel):
@@ -36,7 +42,7 @@ async def verificar_salud():
 
 #2. Creamos el Endpont POST para recibir el pago
 @app.post("/pago")
-async def crear_pago(solicitud: PagoRequest):
+async def crear_pago(solicitud: PagoRequest, db: Session = Depends(get_db)):
     """
     Recibe una solicitud de pago, la valida con Pydantic, 
     le asigna un ID unico y la marca con estado "PENDIENTE".
@@ -45,32 +51,36 @@ async def crear_pago(solicitud: PagoRequest):
 
     #Contruimos la respuesta siulando que el objeto ya esta listo
     # .model_dump() convierte el objeto Pydantic de vuelta a un diccionario nativo de python
-    nuevo_pago ={
-        "id": pago_id,
-        "monto": solicitud.monto,
-        "moneda":solicitud.moneda,
-        "cuenta_origen": solicitud.cuenta_origen,
-        "cuenta_destino": solicitud.cuenta_destino,
-        "estado": "PENDIENTE"
+    nuevo_pago = models.Pago(
+        id=pago_id,
+        monto=solicitud.monto,
+        moneda=solicitud.moneda,
+        cuenta_origen=solicitud.cuenta_origen,
+        cuenta_destino=solicitud.cuenta_destino,
+        estado="PENDIENTE"
+    )
 
-    }
+    # -- OPERACIONES DEL ORM---
+    db.add(nuevo_pago)   #1. Le decimos a la sesion que prepare la insercion del objeto
+    db. commit()         #2. Guardamos fisicamente los cambios en el archivo minipay.db (Es el COMMIT de SQL)
+    db.refresh(nuevo_pago) #3. Refrescamos el objeto para traer cualquier valor calculado por la BD
 
-    #-----Persistencia en memoria---
-    #Guardamos el objeto completo en nuestro diccionario global
-    db_pagos[pago_id] = nuevo_pago
 
     return nuevo_pago
 
-# CONSULTA PAGO POR ID
+# 3. Endpoint GET: Consultar pago real por ID en la Base de Datos
 @app.get("/pago/{pago_id}")
-async def obtener_pago(pago_id: str):
+async def obtener_pago(pago_id: str, db: Session = Depends(get_db)):
     """
     Busca una transaccion en la base de datos simulada por su ID.
     Si no la encuentra, dispara un error HTTP 404.
     """
+    # Explicacion del Query: SELECT * FROM pagos WHERE pagos.id == pago_id LIMIT 1;
+    pago_db = db.query(models.Pago).filter(models.Pago.id == pago_id).first()
+    
+    # Si la consulta devuelve None, significa que el ID no existe en la tabla
 
-    # bUSCAMOS LA LLAVE DIRECTAMENTE EN EL DICCIONARIO
-    if pago_id not in db_pagos:
+    if not pago_db:
         #En servicios financieros, el error 404 debe ser explicito
         raise HTTPException(
             status_code=404,
@@ -78,4 +88,4 @@ async def obtener_pago(pago_id: str):
 
         )
 
-    return db_pagos[pago_id]
+    return pago_db
