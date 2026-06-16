@@ -89,3 +89,33 @@ async def obtener_pago(pago_id: str, db: Session = Depends(get_db)):
         )
 
     return pago_db
+
+# Esquema para el body del PATCH
+class ActualizarEstadoRequest(BaseModel):
+    estado: str = Field(..., pattern="^(PENDIENTE|APROBADO|RECHAZADO)$")
+
+@app.patch("/pago/{pago_id}/estado")
+async def actualizar_estado(pago_id: str, body: ActualizarEstadoRequest, db: Session = Depends(get_db)):
+    """
+    Actualizar el estado de una transacción existente.
+    Regla de negocio: Solo se puede modificar transacciones que estén en estado PENDIENTE.
+    Flujo: Pendiente -> Aprobado o Pendiente -> Rechazado
+    """
+    #1. Buscamos el pago en la base de datos
+    pago_db = db.query(models.Pago).filter(models.Pago.id == pago_id).first()
+
+    if not pago_db:
+        raise HTTPException(status_code=404, detail=f"Transaccion {pago_id} no encontrada")
+
+    #2. Control bancario: Validamos la transicion de estado
+    if pago_db.estado != "PENDIENTE":
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se puede cambiar el estado. La transaccion ya se encuentra en un estado final ({pago_db.estado})."
+
+        )
+    pago_db.estado = body.estado
+    db.commit()
+    db.refresh(pago_db)
+
+    return pago_db
