@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 import models
 from database import engine, get_db
 
+# Importamos nuestro servicio de mensajeria
+from queue_service import QueueService
+
+
 #iNICIALIZAMOS LA APLICACION PRINCIPAL
 app= FastAPI (
     title= "MiniPay API",
@@ -18,6 +22,10 @@ app= FastAPI (
 # Este comando le dice a SQLalchemy que cree todas las tablas definidas en models.py
 # Si es que aun no existen en el archivo minipay.db
 models.Base.metadata.create_all(bind=engine)
+
+#INSTANCIAMOS EL SERVICIO DE SQS DE FORMA GLOBAL
+queue_service = QueueService()
+
 
 #1. Definicmos el esquema de validacion (Data Transfer Object -DTO)
 class PagoRequest(BaseModel):
@@ -62,9 +70,24 @@ async def crear_pago(solicitud: PagoRequest, db: Session = Depends(get_db)):
 
     # -- OPERACIONES DEL ORM---
     db.add(nuevo_pago)   #1. Le decimos a la sesion que prepare la insercion del objeto
-    db. commit()         #2. Guardamos fisicamente los cambios en el archivo minipay.db (Es el COMMIT de SQL)
+    db.commit()         #2. Guardamos fisicamente los cambios en el archivo minipay.db (Es el COMMIT de SQL)
     db.refresh(nuevo_pago) #3. Refrescamos el objeto para traer cualquier valor calculado por la BD
 
+    # DESPACHO ASINCRONO A LA COLA SQS
+    #Enviamos los datos esenciales recopilados del objeto ya guardado
+    message_id = queue_service.enviar_mensaje_pago(
+        pago_id=nuevo_pago.id,
+        monto=nuevo_pago.monto,
+        moneda=nuevo_pago.moneda
+    )
+
+    # PASARELA TRANSPARENTE: Informamos en los logs si el mensaje fue encolado
+    if message_id:
+        print(f"Mensaje enviado con exito a sqs. MessageId assigned by AWS: {message_id}")
+    else:
+        #Nota de arquitectura: En un ambiente bancario real, si la cola falla, puede meter
+        # el mensaje en una tabla local de "reintegro" para no perderlo. Por ahora lo dejamos pasar en logs.
+        print("ALERTA: El pago se guardo en la BD pero no se pudo encolar el mensaje en SQS.")
 
     return nuevo_pago
 

@@ -14,4 +14,4 @@ class Pago(Base):
     moneda = Column(String, nullable=False)
     cuenta_origen = Column(String, nullable=False)
     cuenta_destino = Column(String, nullable=False)
-    estado = Column(String, nullable=False, default="PENDIENTE")
+    estado = Column(String, nullable=False, default="PENDIENTE", server_default="PENDIENTE")

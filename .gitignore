@@ -17,3 +17,5 @@ venv/
 #Configuraciones de editores
 .vscode/
 .idea/
+
+.env
