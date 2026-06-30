@@ -2,7 +2,7 @@ from fastapi import FastAPI
 import models
 from database import engine
 
-from adapters.infrastructure_in.api_fastapi import router as pago_router
+from adapters.input.api_fastapi import router as pago_router
 
 #inicializamos la aplicacion principal
 app = FastAPI(
