@@ -3,13 +3,13 @@ from fastapi import FastAPI, HTTPException, Depends, APIRouter
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-import models
+import adapters.models
 from database import get_db
 
 #Importaciones Hexagonales
 from application.crear_pago_uc import CrearPagoUseCase
-from adapters.out.sqlalchemy_repo import SQLAlchemyPagoRepository
-from adapters.out.sqs_notificador import SQSNotificador
+from adapters.output.sqlalchemy_repo import SQLAlchemyPagoRepository
+from adapters.output.sqs_notificador import SQSNotificador
 
 
 router = APIRouter()

@@ -1,6 +1,6 @@
 from domain.pago import Pago
-from ports.pago_repository import PagoRepository
-from ports.notificador import Notificador
+from domain.ports.pago_repository import PagoRepository
+from domain.ports.notificador import Notificador
 
 
 class CrearPagoUseCase:

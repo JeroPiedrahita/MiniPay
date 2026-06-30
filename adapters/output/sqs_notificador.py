@@ -1,5 +1,5 @@
 from domain.pago import Pago
-from ports.notificador import Notificador
+from domain.ports.notificador import Notificador
 from queue_service import QueueService
 
 class SQSNotificador(Notificador):
