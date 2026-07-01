@@ -3,49 +3,43 @@ from fastapi import FastAPI, HTTPException, Depends, APIRouter
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-import adapters.models
-from database import get_db
-
-#Importaciones Hexagonales
+from infrastructure import models
+from infrastructure.database import get_db
 from application.crear_pago_uc import CrearPagoUseCase
-from adapters.output.sqlalchemy_repo import SQLAlchemyPagoRepository
-from adapters.output.sqs_notificador import SQSNotificador
-
+from application.payment_dto import CreatePaymentDTO
+from infrastructure.outputs.sqlalchemy_repo import SQLAlchemyPagoRepository
+from infrastructure.outputs.sqs_notificador import SQSNotificador
 
 router = APIRouter()
 
-#Esquema de validacion HTTP (DTO de Entrada)
-class PagoRequest(BaseModel):
-    monto: float = Field(..., gt=0)
-    moneda: str = Field(..., pattern="^(COP|USD)$")
-    cuenta_origen:str = Field(..., min_length=5)
-    cuenta_destino: str = Field(..., min_length=5)
-
-@router.get("/salud")
-async def verificar_salud():
-    return {"status": "ok"}
+class PaymentRequest(BaseModel):
+    amount: float = Field(..., gt=0)
+    currency: str = Field(..., pattern="^(COP|USD)$")
+    source_account: str = Field(..., min_length=5)
+    destination_account: str = Field(..., min_length=5)
 
 @router.post("/pago")
-async def crear_pago(solicitud: PagoRequest, db: Session = Depends(get_db)):
-    pago_id = str(uuid.uuid4())
-
-    #1. Instanciamos los adaptadores de salida con la infraestructura real
+async def crear_pago(request: PaymentRequest, db: Session = Depends(get_db)):
+    """
+    HTTP Input Adapter endpoint for creating payments.
+    
+    Validates the incoming payload, converts it into an application DTO,
+    and executes the usecase workflow.
+    """
+    payment_id = str(uuid.uuid4())
     repo = SQLAlchemyPagoRepository(db)
     notificador = SQSNotificador()
+    use_case = CrearPagoUseCase(repo, notificador)
 
-    #2. Inicializamos el caso de uso inyectandole sus dependencias por puerto
-    caso_de_uso = CrearPagoUseCase(repo, notificador)
+    application_dto = CreatePaymentDTO(
+        amount=request.amount,
+        currency=request.currency,
+        source_account=request.source_account,
+        destination_account=request.destination_account
+    )
 
     try:
-        #3. Ejecutamos la logica central del sistema
-        pago_final = caso_de_uso.ejecutar(
-            id=pago.id,
-            monto=solicitud.monto,
-            moneda=solicitud.moneda,
-            cuenta_origen=solicitud.cuenta_origen,
-            cuenta_destino=solicitud.cuenta_destino
-        )
-
-        return pago_final
+        final_payment = use_case.ejecutar(id=payment_id, dto=application_dto)
+        return final_payment
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error interno en el caso de uso: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
